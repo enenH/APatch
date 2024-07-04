@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">APatch</string>
     <string name="home">Главная</string>
     <string name="super_key">SuperKey</string>
     <string name="patch_warnning">Установка связана с рисками. Пожалуйста, убедитесь в наличии резервной копии ваших данных.</string>

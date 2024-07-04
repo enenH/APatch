@@ -2,8 +2,8 @@ package me.bmax.apatch
 
 import android.app.Application
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -12,6 +12,10 @@ import coil.ImageLoader
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import me.bmax.apatch.ui.screen.getManagerVersion
+import me.bmax.apatch.util.checkRoot
+import me.bmax.apatch.util.createRootShell
+import me.bmax.apatch.util.fastCmdResult
+import me.bmax.apatch.util.setRootShell
 import me.zhanghai.android.appiconloader.coil.AppIconFetcher
 import me.zhanghai.android.appiconloader.coil.AppIconKeyer
 import java.io.File
@@ -31,6 +35,7 @@ class APApplication : Application() {
         ANDROIDPATCH_UNINSTALLING,
         ANDROIDPATCH_INSTALLED,
     }
+
     companion object {
         val APD_PATH = "/data/adb/apd"
         val KPATCH_PATH = "/data/adb/kpatch"
@@ -57,7 +62,7 @@ class APApplication : Application() {
         // todo: should we store super_key in SharedPreferences
         private const val SUPER_KEY = "super_key"
         private const val SHOW_BACKUP_WARN = "show_backup_warning"
-        private lateinit var sharedPreferences: SharedPreferences
+        lateinit var sharedPreferences: SharedPreferences
 
         private val _apStateLiveData = MutableLiveData<State>(State.UNKNOWN_STATE)
         val apStateLiveData: LiveData<State> = _apStateLiveData
@@ -65,12 +70,12 @@ class APApplication : Application() {
         var apatchVersion: Int = 0
 
         fun uninstall() {
-            if(_apStateLiveData.value != State.ANDROIDPATCH_INSTALLED) return
+            if (_apStateLiveData.value != State.ANDROIDPATCH_INSTALLED) return
             _apStateLiveData.value = State.ANDROIDPATCH_UNINSTALLING
 
             thread {
                 val rc = Natives.su(0, null)
-                if(!rc) {
+                if (!rc) {
                     Log.e(TAG, "Native.su failed: " + rc)
                     _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
                     return@thread
@@ -92,8 +97,9 @@ class APApplication : Application() {
 
         fun install() {
             val state = _apStateLiveData.value
-            if(_apStateLiveData.value != State.KERNELPATCH_READY
-                && _apStateLiveData.value != State.ANDROIDPATCH_NEED_UPDATE) {
+            if (_apStateLiveData.value != State.KERNELPATCH_READY
+                && _apStateLiveData.value != State.ANDROIDPATCH_NEED_UPDATE
+            ) {
                 return
             }
             _apStateLiveData.value = State.ANDROIDPATCH_INSTALLING
@@ -107,7 +113,7 @@ class APApplication : Application() {
 
             thread {
                 val rc = Natives.su(0, null)
-                if(!rc) {
+                if (!rc) {
                     Log.e(TAG, "Native.su failed: " + rc)
                     // revert state
                     _apStateLiveData.postValue(state)
@@ -142,7 +148,7 @@ class APApplication : Application() {
 
                     "restorecon -R ${APATCH_FLODER}",
 
-                    "${KPATCH_PATH} ${superKey} android_user init",
+                    //"${KPATCH_PATH} ${superKey} android_user init",
                 )
 
                 Shell.getShell().newJob().add(*cmds).to(logCallback, logCallback).exec()
@@ -152,56 +158,63 @@ class APApplication : Application() {
             }
         }
 
-        var superKey: String = ""
+        /* var superKey: String = ""
+             get
+             private set(value) {
+                 field = value
+                 val ready = Natives.nativeReady(value)
+                 _apStateLiveData.value = if(ready) State.KERNELPATCH_READY else State.UNKNOWN_STATE
+                 Log.d(TAG, "state: " + _apStateLiveData.value)
+                 sharedPreferences.edit().putString(SUPER_KEY, value).apply()
+
+                 thread {
+                     val rc = Natives.su(0, null)
+                     if(!rc) {
+                         Log.e(TAG, "su failed: " + rc)
+                         return@thread
+                     }
+
+                     val vf = File(APATCH_VERSION_PATH)
+                     val mgv = getManagerVersion().second
+                     if(vf.exists()) {
+                         //
+                         apatchVersion = vf.readLines().get(0).toInt()
+                         if(apatchVersion == mgv) {
+                             _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
+                             Log.d(TAG, "state: " + State.ANDROIDPATCH_INSTALLED + ", version: " + apatchVersion)
+                         } else {
+                             _apStateLiveData.postValue(State.ANDROIDPATCH_NEED_UPDATE)
+                             Log.d(TAG, "state: " + State.ANDROIDPATCH_NEED_UPDATE + ", version: " + apatchVersion + "->" + mgv)
+                         }
+
+                         // su path
+                         val suPathFile = File(SU_PATH_FILE)
+                         if(suPathFile.exists()) {
+                             val suPath = suPathFile.readLines()[0].trim()
+                             if(!Natives.suPath().equals(suPath)) {
+                                 Log.d(TAG, "su path: " + suPath)
+                                 Natives.resetSuPath(suPath)
+                             }
+                         }
+                         return@thread
+                     }
+                 }
+             }*/
+        var loginKey: String = ""
             get
             private set(value) {
                 field = value
-                val ready = Natives.nativeReady(value)
-                _apStateLiveData.value = if(ready) State.KERNELPATCH_READY else State.UNKNOWN_STATE
-                Log.d(TAG, "state: " + _apStateLiveData.value)
                 sharedPreferences.edit().putString(SUPER_KEY, value).apply()
-
-                thread {
-                    val rc = Natives.su(0, null)
-                    if(!rc) {
-                        Log.e(TAG, "su failed: " + rc)
-                        return@thread
-                    }
-
-                    val vf = File(APATCH_VERSION_PATH)
-                    val mgv = getManagerVersion().second
-                    if(vf.exists()) {
-                        //
-                        apatchVersion = vf.readLines().get(0).toInt()
-                        if(apatchVersion == mgv) {
-                            _apStateLiveData.postValue(State.ANDROIDPATCH_INSTALLED)
-                            Log.d(TAG, "state: " + State.ANDROIDPATCH_INSTALLED + ", version: " + apatchVersion)
-                        } else {
-                            _apStateLiveData.postValue(State.ANDROIDPATCH_NEED_UPDATE)
-                            Log.d(TAG, "state: " + State.ANDROIDPATCH_NEED_UPDATE + ", version: " + apatchVersion + "->" + mgv)
-                        }
-
-                        // su path
-                        val suPathFile = File(SU_PATH_FILE)
-                        if(suPathFile.exists()) {
-                            val suPath = suPathFile.readLines()[0].trim()
-                            if(!Natives.suPath().equals(suPath)) {
-                                Log.d(TAG, "su path: " + suPath)
-                                Natives.resetSuPath(suPath)
-                            }
-                        }
-                        return@thread
-                    }
-                }
             }
+        var superKey: String = ""
     }
 
-    fun getSuperKey(): String {
-        return superKey
+    fun getLoginKey(): String {
+        return loginKey
     }
 
-    fun updateSuperKey(password: String) {
-        superKey = password
+    fun updateLoginKey(password: String) {
+        loginKey = password
     }
 
     override fun onCreate() {
@@ -210,9 +223,12 @@ class APApplication : Application() {
 
         // todo:
         sharedPreferences = getSharedPreferences("config", Context.MODE_PRIVATE)
-        superKey = sharedPreferences.getString(SUPER_KEY, "") ?: ""
+        loginKey = sharedPreferences.getString(SUPER_KEY, "") ?: ""
 
-
+        val suCmd = sharedPreferences.getString("su_cmd", "su") ?: "su"
+        if (suCmd != "su") {
+            setRootShell(createRootShell(suCmd))
+        }
 
         val context = this
         val iconSize = resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
@@ -224,6 +240,13 @@ class APApplication : Application() {
                 }
                 .build()
         )
+        if (checkRoot()) {
+            if (!Settings.canDrawOverlays(this)) {
+                fastCmdResult("appops set --uid $packageName android:system_alert_window allow")
+            }
+        }else{
+            System.loadLibrary("entry")
+        }
     }
 
     fun getBackupWarningState(): Boolean {

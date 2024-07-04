@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home_learn_android_patch_url">https://github.com/bmax121/APatch</string>
-    <string name="app_name" translatable="false">APatch</string>
     <string name="home">홈</string>
     <string name="patch_warnning">Apatch의 설치는 초기화 혹은 벽돌을 발생시킬수 있습니다. 백업을 확실하게 해주세요.</string>
     <string name="patch">패치</string>

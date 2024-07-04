@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "APatch"
+rootProject.name = "LaxiNew"
 include(":app")

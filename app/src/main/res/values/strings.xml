@@ -1,6 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">APatch</string>
-
+    <string name="app_name" translatable="false">Laxi</string>
     <string name="home">Home</string>
 
     <string name="patch_warnning">Installation comes with risks. Please ensure your data is backed up.</string>
@@ -112,4 +111,42 @@
     <string name="apm_downloading">Downloading \"%s\" module…</string>
     <string name="apm_start_downloading">Start downloading %s</string>
     <string name="apm_new_version_available">Click to install the new version, %s.</string>
+
+
+    <string name="loading">Loading</string>
+    <string name="no_root">No root permission obtained, only effective within the framework!</string>
+    <string name="floating">Floating window permission</string>
+    <string name="waiting">Waiting</string>
+    <string name="invalid_key">Invalid card key</string>
+    <string name="started">Already started</string>
+    <string name="no_start">Not started\n</string>
+    <string name="no_connection">Lost connection</string>
+    <string name="laxi">Laxi</string>
+    <string name="enter_key">Enter card key</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="anti_record">hide record</string>
+    <string name="record_black">record black</string>
+    <string name="app_draw">App draw</string>
+    <string name="app_touch">App touch</string>
+    <string name="only_c">no background</string>
+    <string name="module_not_installed">Module not installed</string>
+    <string name="save">Save</string>
+    <string name="anti_record_summary">Prevent being recorded during drawing</string>
+    <string name="record_black_summary">Recording is in full black screen state</string>
+    <string name="app_draw_summary">Enable app drawing, drawing disappears when the software is closed (default for the framework)</string>
+    <string name="home_common_question">Common Information</string>
+    <string name="home_common_question_text">
+1. Touch self-mewing cant be used in virtual machines and frameworks, only real machine root.\n
+2. If the radar cant be dragged, please drag the floating window to the radar, then you can drag the radar.\n
+3. The wide-angle deviation frame in the international version has a zoom option in the settings interface.\n
+4. If games like CFM have a deviation frame, its caused by the game not being fullscreen. Open phone settings, select CFM, and force fullscreen display.\n
+5. If the framework Android 12 and above has a stuck screen and cant be clicked, download adb shell and execute the command "settings put global block_untrusted_touches 0".\n
+6. /lib64/libentryy.so in apk is a pure c executable file that can be extracted and executed by yourself.\n
+7. King Glorys Baili auto-aim needs to open game settings - skill wheel direction follows finger.\n
+    </string>
+    <string name="running">running</string>
+    <string name="default_su_cmd">cmd default su</string>
+    <string name="custom_su_cmd">Custom su cmd</string>
+
 </resources>

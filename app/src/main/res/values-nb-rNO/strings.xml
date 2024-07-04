@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home_learn_android_patch_url">https://github.com/bmax121/APatch</string>
-    <string name="app_name" translatable="false">APatch</string>
     <string name="apm_desc">Beskrivelse</string>
     <string name="home">Hjem</string>
     <string name="kernel_patch">KernelPatch</string>

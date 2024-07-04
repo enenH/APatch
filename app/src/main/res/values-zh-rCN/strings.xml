@@ -3,7 +3,6 @@
     <string name="apm">系统模块</string>
     <string name="super_key">超级密钥</string>
     <string name="home_learn_android_patch_url">https://github.com/bmax121/APatch</string>
-    <string name="app_name" translatable="false">APatch</string>
     <string name="kpm">内核模块</string>
     <string name="android_patch">系统补丁</string>
     <string name="send_log">发送日志</string>
@@ -30,7 +29,7 @@
     <string name="home_patch_next_step">下一步</string>
     <string name="home_not_installed">未安装</string>
     <string name="reboot_bootloader">重启至 Bootloader</string>
-    <string name="about_source_code">在 %1$s 查看源码，<br/>加入我们的 %2$s 频道</string>
+    <string name="about_source_code">在 %1$s 查看源码，<br />加入我们的 %2$s 频道</string>
     <string name="kpatch_shadow_path">kpatch: %s → %s</string>
     <string name="home_auth_key_desc">通过认证后开始工作</string>
     <string name="kpatch_version">版本：%d.%d.%d</string>
@@ -100,4 +99,43 @@
     <string name="patch">开始修补</string>
     <string name="settings_global_namespace_mode_summary">所有 Root 会话均使用全局挂载命名空间</string>
     <string name="settings_global_namespace_mode">全局命名空间模式</string>
+
+    <string name="loading">加载中</string>
+    <string name="no_root">未获取root权限，只在框架有效果！</string>
+    <string name="floating">悬浮窗权限</string>
+    <string name="waiting">等待</string>
+    <string name="invalid_key">无效卡密</string>
+    <string name="started">已经启动</string>
+    <string name="no_start">未开启\n</string>
+    <string name="no_connection">失去链接</string>
+    <string name="laxi">拉稀</string>
+    <string name="enter_key">输入卡密</string>
+    <string name="start">开启</string>
+    <string name="stop">关闭</string>
+    <string name="anti_record">防录屏</string>
+    <string name="record_black">录屏黑屏</string>
+
+    <string name="anti_record_summary">防止被录制到绘制</string>
+    <string name="record_black_summary">录制是全程黑屏状态</string>
+    <string name="app_draw_summary">启用app绘制，软件关闭则绘制消失(框架默认)</string>
+
+    <string name="app_draw">app绘制</string>
+
+    <string name="app_touch">app触摸</string>
+    <string name="only_c">纯c无后台</string>
+    <string name="module_not_installed">模块未安装</string>
+    <string name="save">保存</string>
+    <string name="home_common_question">常见信息</string>
+    <string name="home_common_question_text">
+1.触摸自喵在虚拟机和框架不能使用，只能真机root\n
+2.雷达拖动不了，请将悬浮窗拉至雷达上面，就能拖动雷达了\n
+3.国际服广角偏框在设置界面有缩放选项\n
+4.cfm等游戏如果出现偏框，是游戏没全屏导致的，打开手机设置选择cfm 强制全屏显示\n
+5.框架安卓12及以上出现卡屏点不动，下载adb shell，执行命令"settings put global block_untrusted_touches 0"\n
+6.apk中 /lib64/libentryy.so 是纯c可执行文件可以解压出来自己执行\n
+7.王者百里自瞄需要 打开游戏设置-技能轮盘方向跟随手指\n
+    </string>
+    <string name="running">运行中</string>
+    <string name="default_su_cmd">命令默认为su</string>
+    <string name="custom_su_cmd">自定义su命令</string>
 </resources>

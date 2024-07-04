@@ -94,7 +94,7 @@ private fun AboutCardContent() {
                     fontSize = 14.sp
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                /*Spacer(modifier = Modifier.height(8.dp))
 
                 HtmlText(
                     html = stringResource(
@@ -102,7 +102,7 @@ private fun AboutCardContent() {
                         "<b><a href=\"https://github.com/bmax121/APatch\">GitHub</a></b>",
                         "<b><a href=\"https://t.me/APatchChannel\">Telegram</a></b>"
                     )
-                )
+                )*/
             }
         }
     }

@@ -7,8 +7,13 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.lsplugin.apksign)
     id("kotlin-parcelize")
+    id("org.lsposed.lsparanoid")
 }
 
+lsparanoid {
+    classFilter = { true }
+    variantFilter = { variant -> variant.name == "release" }
+}
 
 val managerVersionCode: Int by rootProject.extra
 val managerVersionName: String by rootProject.extra
@@ -25,11 +30,22 @@ apksign {
 android {
     namespace = "me.bmax.apatch"
 
+    defaultConfig {
+        applicationId = "android.enennb"
+
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
@@ -44,7 +60,7 @@ android {
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.3"
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
 
     packaging {
@@ -77,7 +93,7 @@ android {
 }
 
 
-tasks.register<Download>("downloadKpimg") {
+/*tasks.register<Download>("downloadKpimg") {
     src("https://github.com/bmax121/KernelPatch/releases/download/${kernelPatchVersion}/kpimg-android")
     dest(file("${project.projectDir}/src/main/assets/kpimg"))
     onlyIfNewer(true)
@@ -110,7 +126,7 @@ tasks.getByName("preBuild").dependsOn(
     "downloadKpatch",
     "downloadKptools",
     "downloadApjni",
-)
+)*/
 
 
 dependencies {

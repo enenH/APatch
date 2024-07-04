@@ -65,15 +65,15 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun BottomBar(navController: NavHostController) {
     NavigationBar(tonalElevation = 8.dp) {
-        BottomBarDestination.values().forEach { destination ->
-            val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
-            val kPatchReady = !state.equals(APApplication.State.UNKNOWN_STATE)
-            val aPatchReady = (state.equals(APApplication.State.ANDROIDPATCH_INSTALLING) ||
-                               state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) ||
-                               state.equals(APApplication.State.ANDROIDPATCH_NEED_UPDATE))
+        BottomBarDestination.entries.forEach { destination ->
+            /*val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
+            val kPatchReady = state != APApplication.State.UNKNOWN_STATE
+            val aPatchReady = (state == APApplication.State.ANDROIDPATCH_INSTALLING ||
+                    state == APApplication.State.ANDROIDPATCH_INSTALLED ||
+                    state == APApplication.State.ANDROIDPATCH_NEED_UPDATE)
             val hideDestination = (destination.kPatchRequired && !kPatchReady) ||
-                                  (destination.aPatchRequired && !aPatchReady)
-            if (hideDestination) return@forEach
+                    (destination.aPatchRequired && !aPatchReady)
+            if (hideDestination) return@forEach*/
             val isCurrentDestOnBackStack by navController.isRouteOnBackStackAsState(destination.direction)
             NavigationBarItem(
                 selected = isCurrentDestOnBackStack,

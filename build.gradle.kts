@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.agp.lib) apply false
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.lsplugin.cmaker)
+    id("org.lsposed.lsparanoid") version "0.6.0" apply false
 }
 
 cmaker {
@@ -35,17 +36,17 @@ cmaker {
 project.ext.set("kernelPatchVersion", "0.8.5")
 
 val androidMinSdkVersion = 26
-val androidTargetSdkVersion = 33
-val androidCompileSdkVersion = 33
+val androidTargetSdkVersion = 28
+val androidCompileSdkVersion = 34
 
-val androidBuildToolsVersion = "33.0.2"
-val androidCompileNdkVersion = "25.2.9519653"
+val androidBuildToolsVersion = "34.0.0"
+val androidCompileNdkVersion = "26.1.10909125"
 
 val androidSourceCompatibility = JavaVersion.VERSION_17
 val androidTargetCompatibility = JavaVersion.VERSION_17
 
-val managerVersionCode by extra(getVersionCode())
-val managerVersionName by extra(getVersionName())
+val managerVersionCode by extra(7)
+val managerVersionName by extra("7.0.0")
 
 
 tasks.register<Delete>("clean") {

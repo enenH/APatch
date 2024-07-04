@@ -7,9 +7,9 @@ import androidx.compose.runtime.Immutable
 import kotlinx.android.parcel.Parcelize
 
 object Natives {
-    init {
+   /* init {
         System.loadLibrary("apjni")
-    }
+    }*/
 
     @Immutable
     @Parcelize

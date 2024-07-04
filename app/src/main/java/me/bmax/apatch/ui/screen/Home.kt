@@ -1,34 +1,39 @@
 package me.bmax.apatch.ui.screen
 
-import android.Manifest
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
+import android.net.Uri
 import android.os.Build
+import android.os.IBinder
 import android.os.PowerManager
+import android.provider.Settings
 import android.system.Os
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.InstallMobile
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.InstallMobile
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,29 +42,33 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.round
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootNavGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
-import dev.utils.app.permission.PermissionUtils
-import dev.utils.app.permission.PermissionUtils.PermissionCallback
-import me.bmax.apatch.util.getSELinuxStatus
+import com.topjohnwu.superuser.Shell
+import dev.utils.app.AppUtils.getPackageName
 import me.bmax.apatch.*
 import me.bmax.apatch.R
+import me.bmax.apatch.services.MyService
+import me.bmax.apatch.services.RootServices
 import me.bmax.apatch.ui.component.ConfirmDialog
 import me.bmax.apatch.ui.screen.destinations.PatchScreenDestination
-import me.bmax.apatch.util.reboot
 import me.bmax.apatch.ui.screen.destinations.SettingScreenDestination
+import me.bmax.apatch.util.APatchCli
+import me.bmax.apatch.util.checkRoot
+import me.bmax.apatch.util.fastCmdResult
+import me.bmax.apatch.util.getSELinuxStatus
+import me.bmax.apatch.util.reboot
+import kotlin.concurrent.thread
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+
 
 @RootNavGraph(start = true)
 @Destination
@@ -67,15 +76,17 @@ import me.bmax.apatch.ui.screen.destinations.SettingScreenDestination
 fun HomeScreen(navigator: DestinationsNavigator) {
     val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
 
-    Scaffold(topBar = {
-        TopBar(onSettingsClick = {
-            navigator.navigate(SettingScreenDestination)
-        })
-    }, floatingActionButton = {
+    Scaffold(
+        topBar = {
+            TopBar(onSettingsClick = {
+                navigator.navigate(SettingScreenDestination)
+            })
+        }/*, floatingActionButton = {
 
         FloatButton(navigator)
 
-    }) { innerPadding ->
+    }*/
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -84,9 +95,10 @@ fun HomeScreen(navigator: DestinationsNavigator) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             WarningCard()
-            KStatusCard(state)
-            AStatusCard(state, navigator)
+            //KStatusCard(state)
+            //AStatusCard(state, navigator)
             InfoCard()
+            LoginCard()
             LearnMoreCard()
             Spacer(Modifier)
             ConfirmDialog()
@@ -94,8 +106,35 @@ fun HomeScreen(navigator: DestinationsNavigator) {
     }
 }
 
+private suspend inline fun connectRootService(
+    crossinline onDisconnect: () -> Unit = {}
+): Pair<IBinder, ServiceConnection> = suspendCoroutine {
+    val connection = object : ServiceConnection {
+        override fun onServiceDisconnected(name: ComponentName?) {
+            onDisconnect()
+        }
+
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            it.resume(binder as IBinder to this)
+        }
+    }
+    val intent = Intent(apApp, RootServices::class.java);
+    val task = RootServices.bindOrTask(
+        intent,
+        Shell.EXECUTOR,
+        connection,
+    )
+    val shell = APatchCli.SHELL
+    task?.let { it1 -> shell.execTask(it1) }
+}
+
+private fun stopRootService() {
+    val intent = Intent(apApp, RootServices::class.java);
+    RootServices.stop(intent)
+}
+
 @Composable
-fun AuthSuperKey(showDialog: MutableState<Boolean>) {
+fun LoginKey(showDialog: MutableState<Boolean>) {
     var key by remember { mutableStateOf("") }
     var keyVisible by remember { mutableStateOf(false) }
     var enable by remember { mutableStateOf(false) }
@@ -113,7 +152,8 @@ fun AuthSuperKey(showDialog: MutableState<Boolean>) {
                         value = key,
                         onValueChange = {
                             key = it
-                            enable = !key.isEmpty() },
+                            enable = !key.isEmpty()
+                        },
                         label = { Text(stringResource(id = R.string.super_key)) },
                         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
@@ -147,7 +187,72 @@ fun AuthSuperKey(showDialog: MutableState<Boolean>) {
                 enabled = enable,
                 onClick = {
                     showDialog.value = false
-                    apApp.updateSuperKey(key)
+                    apApp.updateLoginKey(key)
+                }
+            ) {
+                Text(stringResource(id = android.R.string.ok))
+            }
+        },
+    )
+}
+
+@Composable
+fun AuthSuperKey(showDialog: MutableState<Boolean>) {
+    var key by remember { mutableStateOf("") }
+    var keyVisible by remember { mutableStateOf(true) }
+    var enable by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { showDialog.value = false },
+        title = { Text(stringResource(id = R.string.home_auth_key_title)) },
+        text = {
+            Column {
+                Text(stringResource(id = R.string.home_auth_key_desc))
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    TextField(
+                        value = key,
+                        singleLine = true,
+                        onValueChange = {
+                            key = it
+                            enable = key.trim().length == 20
+                        },
+                        label = { Text(stringResource(id = R.string.super_key)) },
+                        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+                    )
+
+                    IconButton(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .padding(end = 12.dp),
+                        onClick = { keyVisible = !keyVisible }
+                    ) {
+                        Icon(
+                            imageVector = if (keyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = null,
+                            tint = Color.Gray
+                        )
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = {
+                    showDialog.value = false
+                }
+            ) {
+                Text(stringResource(id = android.R.string.cancel))
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = enable,
+                onClick = {
+                    showDialog.value = false
+                    apApp.updateLoginKey(key)
                 }
             ) {
                 Text(stringResource(id = android.R.string.ok))
@@ -183,7 +288,7 @@ fun StartPatch(showDialog: MutableState<Boolean>, navigator: DestinationsNavigat
                     value = key,
                     onValueChange = {
                         key = it;
-                        enable = ! it.isEmpty()
+                        enable = !it.isEmpty()
                     },
                     label = { Text(stringResource(id = R.string.super_key)) },
                     visualTransformation = VisualTransformation.None,
@@ -207,25 +312,29 @@ fun StartPatch(showDialog: MutableState<Boolean>, navigator: DestinationsNavigat
     )
 }
 
-@Composable
+/*@Composable
 fun FloatButton(navigator: DestinationsNavigator) {
     val state by APApplication.apStateLiveData.observeAsState(APApplication.State.UNKNOWN_STATE)
 
-    var showAuthKeyDialog = remember { mutableStateOf(false)  }
-    var showSetKeyDialog = remember { mutableStateOf(false)  }
-    var permissionRequest = remember { mutableStateOf(false)  }
+    var showAuthKeyDialog = remember { mutableStateOf(false) }
+    var showSetKeyDialog = remember { mutableStateOf(false) }
+    var permissionRequest = remember { mutableStateOf(false) }
 
     if (showAuthKeyDialog.value) {
         AuthSuperKey(showDialog = showAuthKeyDialog)
     }
 
-    if(permissionRequest.value) {
-        PermissionUtils.permission(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE)
-            .callback( object : PermissionCallback{
+    if (permissionRequest.value) {
+        PermissionUtils.permission(
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        )
+            .callback(object : PermissionCallback {
                 override fun onGranted() {
                     permissionRequest.value = false
                     showSetKeyDialog.value = true
                 }
+
                 override fun onDenied(
                     grantedList: MutableList<String>?,
                     deniedList: MutableList<String>?,
@@ -237,7 +346,7 @@ fun FloatButton(navigator: DestinationsNavigator) {
             .request(LocalContext.current as Activity)
     }
 
-    if(showSetKeyDialog.value) {
+    if (showSetKeyDialog.value) {
         StartPatch(showDialog = showSetKeyDialog, navigator)
     }
 
@@ -259,8 +368,8 @@ fun FloatButton(navigator: DestinationsNavigator) {
         Box() {
             ExtendedFloatingActionButton(
                 onClick = {
-                    if(state != APApplication.State.UNKNOWN_STATE) {
-                        apApp.updateSuperKey("")
+                    if (state != APApplication.State.UNKNOWN_STATE) {
+                        apApp.updateLoginKey("")
                     } else {
                         showAuthKeyDialog.value = true
                     }
@@ -278,7 +387,7 @@ fun FloatButton(navigator: DestinationsNavigator) {
             )
         }
     }
-}
+}*/
 
 @Composable
 fun RebootDropdownItem(@StringRes id: Int, reason: String = "") {
@@ -335,53 +444,83 @@ private fun KStatusCard(state: APApplication.State) {
             MaterialTheme.colorScheme.secondaryContainer
         })
     ) {
-        Column(modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Row {
-                Text(text = stringResource(R.string.kernel_patch),
+                Text(
+                    text = stringResource(R.string.kernel_patch),
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp), verticalAlignment = Alignment.CenterVertically
+            ) {
                 when {
                     !state.equals(APApplication.State.UNKNOWN_STATE) -> {
                         val kernelPatchVersion = Natives.kerenlPatchVersion()
                         Icon(Icons.Outlined.CheckCircle, stringResource(R.string.home_working))
                         Column(Modifier.padding(start = 16.dp)) {
-                            Text(text = stringResource(R.string.home_working),
+                            Text(
+                                text = stringResource(R.string.home_working),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(Modifier.height(6.dp))
-                            Text(text = stringResource(R.string.kpatch_version, kernelPatchVersion.and(0xff0000).shr(16),
-                                    kernelPatchVersion.and(0xff00).shr(8), kernelPatchVersion.and(0xff)),
+                            Text(
+                                text = stringResource(
+                                    R.string.kpatch_version,
+                                    kernelPatchVersion.and(0xff0000).shr(16),
+                                    kernelPatchVersion.and(0xff00).shr(8),
+                                    kernelPatchVersion.and(0xff)
+                                ),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(Modifier.height(6.dp))
                             when {
-                                state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) || state.equals(APApplication.State.ANDROIDPATCH_NEED_UPDATE) -> {
-                                    Text(text = stringResource(R.string.home_su_path_ex, Natives.suPath(), APApplication.APD_PATH),
+                                state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) || state.equals(
+                                    APApplication.State.ANDROIDPATCH_NEED_UPDATE
+                                ) -> {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.home_su_path_ex,
+                                            Natives.suPath(),
+                                            APApplication.APD_PATH
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Spacer(Modifier.height(6.dp))
-                                    Text(text = stringResource(R.string.kpatch_shadow_path, APApplication.KPATCH_SHADOW_PATH, APApplication.KPATCH_PATH),
+                                    Text(
+                                        text = stringResource(
+                                            R.string.kpatch_shadow_path,
+                                            APApplication.KPATCH_SHADOW_PATH,
+                                            APApplication.KPATCH_PATH
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
+
                                 !state.equals(APApplication.State.UNKNOWN_STATE) -> {
-                                    Text(text = stringResource(R.string.home_su_path, Natives.suPath()),
+                                    Text(
+                                        text = stringResource(
+                                            R.string.home_su_path,
+                                            Natives.suPath()
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
                             }
                         }
                     }
+
                     else -> {
                         Icon(Icons.Outlined.Block, stringResource(R.string.home_install_unknown))
                         Column(Modifier.padding(start = 16.dp)) {
-                            Text(text = stringResource(R.string.home_install_unknown),
+                            Text(
+                                text = stringResource(R.string.home_install_unknown),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -393,37 +532,236 @@ private fun KStatusCard(state: APApplication.State) {
 }
 
 @Composable
+private fun LoginCard() {
+    var showLoginDialog = remember { mutableStateOf(false) }
+
+    if (showLoginDialog.value) {
+        AuthSuperKey(showDialog = showLoginDialog)
+    }
+
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = run {
+            MaterialTheme.colorScheme.primaryContainer
+        })
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable {
+                    showLoginDialog.value = true
+                }
+                .fillMaxWidth()
+                .padding(24.dp), verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.Key, stringResource(R.string.enter_key))
+            Column(Modifier.padding(start = 20.dp)) {
+                Text(
+                    text = stringResource(R.string.enter_key),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = apApp.getLoginKey().let { it.ifEmpty { "..." } },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+        if (!apApp.getLoginKey().isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                val context = LocalContext.current as Activity
+                val isStarted = rememberSaveable { mutableStateOf(false) }
+                /*  val isClicked = rememberSaveable { mutableStateOf(false) }*/
+
+                val buttonColor =
+                    animateColorAsState(if (isStarted.value) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary)
+                /*  if (isClicked.value) {
+                      CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                  } else {*/
+                ElevatedButton(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    onClick = onClick@{
+                        if (!Settings.canDrawOverlays(apApp)) {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.getPackageName()}")
+                            )
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                            context.finish()
+                            System.exit(0)
+                            return@onClick
+                        }
+
+                        if (isStarted.value) return@onClick
+                        isStarted.value = true
+
+                        if (checkRoot()) {
+                            if (!appDraw) {
+                                var cmd = apApp.applicationInfo.nativeLibraryDir + "/libentryy.so"
+                                if (!antiRecord) cmd += " -h"
+                                if (recordBlack) cmd += " -s"
+                                cmd += " -k ${apApp.getLoginKey()}"
+                                thread {
+                                    fastCmdResult("pkill libentryy.so")
+                                    fastCmdResult("nsenter --mount=/proc/1/ns/mnt -- " + cmd)
+                                    isStarted.value = false
+                                }
+                                return@onClick
+                            }
+
+                            var binder: IBinder? = null
+                            val connection = object : ServiceConnection {
+                                override fun onServiceDisconnected(name: ComponentName?) {
+                                    Log.w(TAG, "RootService disconnected")
+                                    context.stopService(Intent(context, MyService::class.java))
+                                    isStarted.value = false
+                                }
+
+                                override fun onServiceConnected(
+                                    pname: ComponentName?,
+                                    pbinder: IBinder?
+                                ) {
+                                    binder = pbinder
+                                }
+                            }
+                            val intent = Intent(apApp, RootServices::class.java);
+                            val task = RootServices.bindOrTask(
+                                intent,
+                                Shell.EXECUTOR,
+                                connection,
+                            )
+                            val shell = APatchCli.SHELL
+                            task?.let { it1 -> shell.execTask(it1) }
+
+                            thread {
+                                while (binder == null) {
+                                    Thread.sleep(100)
+                                }
+                                val ipc = IAPRootService.Stub.asInterface(binder)
+                                Native.ipc = ipc
+                                Native.init(
+                                    apApp.getLoginKey(),
+                                    context.filesDir.absolutePath,
+                                    antiRecord,
+                                    recordBlack,
+                                    appDraw
+                                )
+                                context.runOnUiThread {
+                                    context.startForegroundService(
+                                        Intent(
+                                            context,
+                                            MyService::class.java
+                                        )
+                                    )
+                                }
+                                while (true) {
+                                    if (Native.getWindowSize()[0] == -100f) {
+                                        break
+                                    }
+                                    Thread.sleep(2000)
+                                }
+                                context.runOnUiThread {
+                                    context.stopService(Intent(context, MyService::class.java))
+                                    isStarted.value = false
+                                }
+                            }
+                            return@onClick
+                        }
+
+                        context.startForegroundService(
+                            Intent(
+                                context,
+                                MyService::class.java
+                            )
+                        )
+                        thread {
+                            Native.init(
+                                apApp.getLoginKey(),
+                                context.filesDir.absolutePath,
+                                antiRecord,
+                                recordBlack,
+                                appDraw
+                            )
+                            while (true) {
+                                if (Native.getWindowSize()[0] == -100f) {
+                                    break
+                                }
+                                Thread.sleep(2000)
+                            }
+                            context.runOnUiThread {
+                                context.stopService(Intent(context, MyService::class.java))
+                                isStarted.value = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = buttonColor.value)
+                ) {
+                    Text(
+                        text = if (isStarted.value) stringResource(R.string.running) else stringResource(
+                            R.string.start
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+/*if (!Settings.canDrawOverlays(apApp)) {
+    val intent = Intent(
+        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+        Uri.parse("package:${context.packageName}")
+    )
+    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+    context.finish()
+    System.exit(0)
+}*/
+@Composable
 private fun AStatusCard(state: APApplication.State, navigator: DestinationsNavigator) {
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = run {
             MaterialTheme.colorScheme.secondaryContainer
         })
     ) {
-        Column(modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally
+        ) {
             Row {
-                Text(text = stringResource(R.string.android_patch),
+                Text(
+                    text = stringResource(R.string.android_patch),
                     style = MaterialTheme.typography.titleMedium
                 )
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    .padding(10.dp), verticalAlignment = Alignment.CenterVertically
+            ) {
                 when {
                     state.equals(APApplication.State.KERNELPATCH_READY) -> {
                         Icon(Icons.Outlined.Block, stringResource(R.string.home_not_installed))
                     }
+
                     state.equals(APApplication.State.ANDROIDPATCH_INSTALLING) -> {
                         Icon(Icons.Outlined.InstallMobile, stringResource(R.string.home_installing))
                     }
+
                     state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) -> {
                         Icon(Icons.Outlined.CheckCircle, stringResource(R.string.home_working))
                     }
+
                     state.equals(APApplication.State.ANDROIDPATCH_NEED_UPDATE) -> {
                         Icon(Icons.Outlined.SystemUpdate, stringResource(R.string.home_need_update))
                     }
+
                     else -> {
                         Icon(Icons.Outlined.Block, stringResource(R.string.home_install_unknown))
                     }
@@ -436,45 +774,62 @@ private fun AStatusCard(state: APApplication.State, navigator: DestinationsNavig
                     val managerVersion = getManagerVersion()
                     when {
                         state.equals(APApplication.State.KERNELPATCH_READY) -> {
-                            Text(text = stringResource(R.string.home_not_installed),
+                            Text(
+                                text = stringResource(R.string.home_not_installed),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
+
                         state.equals(APApplication.State.ANDROIDPATCH_INSTALLING) -> {
-                            Text(text = stringResource(R.string.home_installing),
+                            Text(
+                                text = stringResource(R.string.home_installing),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
+
                         state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) -> {
-                            Text(text = stringResource(R.string.home_working),
+                            Text(
+                                text = stringResource(R.string.home_working),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(Modifier.height(6.dp))
-                            Text(text = stringResource(R.string.apatch_version,
-                                "${managerVersion.first} (${managerVersion.second})"),
+                            Text(
+                                text = stringResource(
+                                    R.string.apatch_version,
+                                    "${managerVersion.first} (${managerVersion.second})"
+                                ),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
+
                         state.equals(APApplication.State.ANDROIDPATCH_NEED_UPDATE) -> {
-                            Text(text = stringResource(R.string.home_need_update),
+                            Text(
+                                text = stringResource(R.string.home_need_update),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(Modifier.height(6.dp))
-                            Text(text = stringResource(R.string.apatch_version_update, "${APApplication.apatchVersion}",
-                                "${managerVersion.first} (${managerVersion.second})"),
+                            Text(
+                                text = stringResource(
+                                    R.string.apatch_version_update,
+                                    "${APApplication.apatchVersion}",
+                                    "${managerVersion.first} (${managerVersion.second})"
+                                ),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
+
                         else -> {
-                            Text(text = stringResource(R.string.home_install_unknown),
+                            Text(
+                                text = stringResource(R.string.home_install_unknown),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
                     }
                 }
-                if(!state.equals(APApplication.State.UNKNOWN_STATE)) {
-                    Column (modifier = Modifier
-                        .align(Alignment.CenterVertically)
+                if (!state.equals(APApplication.State.UNKNOWN_STATE)) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterVertically)
                     ) {
                         Button(
                             onClick = {
@@ -486,9 +841,11 @@ private fun AStatusCard(state: APApplication.State, navigator: DestinationsNavig
 //                                            navigator.navigate(PatchScreenDestination(null, apApp.getSuperKey()))
 //                                        }
                                     }
+
                                     state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) -> {
                                         APApplication.uninstall()
                                     }
+
                                     else -> {
 
                                     }
@@ -497,17 +854,29 @@ private fun AStatusCard(state: APApplication.State, navigator: DestinationsNavig
                             content = {
                                 when {
                                     state.equals(APApplication.State.KERNELPATCH_READY) -> {
-                                        Text(text = stringResource(id = R.string.home_ap_cando_install), color = Color.Black)
+                                        Text(
+                                            text = stringResource(id = R.string.home_ap_cando_install),
+                                            color = Color.Black
+                                        )
                                     }
+
                                     state.equals(APApplication.State.ANDROIDPATCH_UNINSTALLING)
                                             || state.equals(APApplication.State.ANDROIDPATCH_UNINSTALLING) -> {
                                         Icon(Icons.Outlined.Cached, contentDescription = "busy")
                                     }
+
                                     state.equals(APApplication.State.ANDROIDPATCH_NEED_UPDATE) -> {
-                                        Text(text = stringResource(id = R.string.home_ap_cando_update), color = Color.Black)
+                                        Text(
+                                            text = stringResource(id = R.string.home_ap_cando_update),
+                                            color = Color.Black
+                                        )
                                     }
+
                                     state.equals(APApplication.State.ANDROIDPATCH_INSTALLED) -> {
-                                        Text(text = stringResource(id = R.string.home_ap_cando_uninstall), color = Color.Black)
+                                        Text(
+                                            text = stringResource(id = R.string.home_ap_cando_uninstall),
+                                            color = Color.Black
+                                        )
                                     }
                                 }
                             }
@@ -522,50 +891,51 @@ private fun AStatusCard(state: APApplication.State, navigator: DestinationsNavig
 
 @Composable
 fun WarningCard() {
-    var show by rememberSaveable { mutableStateOf(apApp.getBackupWarningState()) }
-    if(show) {
+    var show by rememberSaveable { mutableStateOf(!checkRoot()) }
+    if (show) {
         ElevatedCard(
             colors = CardDefaults.elevatedCardColors(containerColor = run {
                 MaterialTheme.colorScheme.error
             })
         ) {
-            Row (
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp)
             ) {
-                Column (
+                Column(
                     modifier = Modifier
                         .padding(12.dp),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(Icons.Filled.Warning, contentDescription = "warning")
                 }
-                Column (
+                Column(
                     modifier = Modifier
                         .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row (
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.CenterHorizontally),
                         horizontalArrangement = Arrangement.SpaceBetween
-                    ){
+                    ) {
                         Text(
                             modifier = Modifier.weight(1f),
-                            text = stringResource(id = R.string.patch_warnning),
+                            text = stringResource(id = R.string.no_root),
                         )
 
                         Spacer(Modifier.width(12.dp))
 
-                        Icon(Icons.Outlined.Clear,
-                            contentDescription =  "",
+                        Icon(
+                            Icons.Outlined.Clear,
+                            contentDescription = "",
                             modifier = Modifier
                                 .clickable {
                                     show = false
-                                    apApp.updateBackupWarningState(false)
+                                    //apApp.updateBackupWarningState(false)
                                 },
                         )
                     }
@@ -578,7 +948,11 @@ fun WarningCard() {
 
 @Composable
 private fun InfoCard() {
-    ElevatedCard {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = run {
+            MaterialTheme.colorScheme.secondaryContainer
+        })
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -608,24 +982,27 @@ private fun InfoCard() {
 
 @Composable
 fun LearnMoreCard() {
-    val uriHandler = LocalUriHandler.current
-    val url = stringResource(R.string.home_learn_android_patch_url)
-
+    /* val uriHandler = LocalUriHandler.current
+     val url = stringResource(R.string.home_learn_android_patch_url)*/
+    val context = LocalContext.current
     ElevatedCard {
         Row(modifier = Modifier
             .fillMaxWidth()
             .clickable {
-                uriHandler.openUri(url)
+                Toast
+                    .makeText(context, "(¬_¬)", Toast.LENGTH_SHORT)
+                    .show()
+                //uriHandler.openUri(url)
             }
             .padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
             Column() {
                 Text(
-                    text = stringResource(R.string.home_learn_apatch),
+                    text = stringResource(R.string.home_common_question),
                     style = MaterialTheme.typography.titleSmall
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.home_click_to_learn_apatch),
+                    text = stringResource(R.string.home_common_question_text),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }

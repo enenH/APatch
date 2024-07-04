@@ -15,61 +15,59 @@ import kotlin.concurrent.thread
 
 private const val TAG = "APatchCli"
 
-private fun getKPatchPath(): String {
-    return apApp.applicationInfo.nativeLibraryDir + File.separator + "libkpatch.so"
-}
-
 object APatchCli {
-    val SHELL: Shell = createRootShell()
+    var SHELL: Shell = createRootShell()
 }
 
 fun getRootShell(): Shell {
     return APatchCli.SHELL
 }
 
-fun createRootShell(): Shell {
+fun setRootShell(shell: Shell) {
+    APatchCli.SHELL = shell
+}
+
+fun createRootShell(cmd: String): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create()
     return try {
-        builder.build(
-            getKPatchPath(),
-            APApplication.superKey,
-            "su",
-            "-Z",
-            APApplication.MAGISK_SCONTEXT
-        )
+        builder.build(cmd)
     } catch (e: Throwable) {
         Log.e(TAG, "su failed: ", e)
         builder.build("sh")
     }
 }
 
-fun createRootShellForLog(): Shell {
+fun createRootShell(): Shell {
     Shell.enableVerboseLogging = BuildConfig.DEBUG
     val builder = Shell.Builder.create()
     return try {
-        builder.build(
-            getKPatchPath(),
-            APApplication.superKey,
-            "su",
-            "-Z",
-            APApplication.MAGISK_SCONTEXT
-        )
+        builder.build("su")
     } catch (e: Throwable) {
         Log.e(TAG, "su failed: ", e)
-        return try {
-            Log.e(TAG, "retry su: ", e)
-            builder.build("su")
-        } catch (e: Throwable) {
-            Log.e(TAG, "retry su failed: ", e)
-            builder.build("sh")
-        }
+        builder.build("sh")
     }
 }
+
 
 fun execApd(args: String): Boolean {
     val shell = getRootShell()
     return ShellUtils.fastCmdResult(shell, "${APApplication.APD_PATH} $args")
+}
+
+fun checkRoot(): Boolean {
+    val shell = getRootShell()
+    return shell.isRoot
+}
+
+fun fastCmdResult(cmd: String): String {
+    val shell = getRootShell()
+    return ShellUtils.fastCmd(shell, cmd)
+}
+
+fun fastCmdResultSubmit(cmd: String) {
+    val shell = getRootShell()
+    shell.newJob().add(cmd).to(ArrayList(), null).submit()
 }
 
 fun listModules(): String {
